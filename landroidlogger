@@ -1,0 +1,71 @@
+#!/usr/bin/perl
+
+use HTTP::Request;
+use LWP::UserAgent;
+use JSON;
+use Data::Dumper;
+use Sys::Syslog qw(:standard :extended :macros); 
+use Encode qw(decode encode);
+use strict;
+
+# this is your landroid ip address or hostname
+my $landroidip="192.168.1.100";
+# this is your landroid PIN code
+my $landroidpin="1234";
+#this is your log server
+my $loghost = "192.168.1.1";
+
+my $statefile="/tmp/landroid.state";
+my $json = 'data=[["log_id",0,0],["log_num",0,100]]';
+my $uri = "http://${landroidip}/jsonLog.cgi";
+my $req = HTTP::Request->new( 'POST', $uri );
+my $ua = LWP::UserAgent->new();
+
+setlogsock("udp", $loghost);
+openlog("landroid", "ndelay", "local0");
+
+$ua->credentials("${landroidip}:80","Landroid","admin", $landroidpin);
+$req->header( 'Content-Type' => 'application/x-www-form-urlencoded' );
+$req->content( $json );
+
+
+sub getState 
+{
+  open(my $fh, '<:encoding(UTF-8)', $statefile) || return 0;
+  my $row = <$fh>;
+  chomp $row;
+  close $fh;
+  return $row;
+}
+
+sub setState
+{
+  my $line=shift;
+  open(my $fh, '>:encoding(UTF-8)', $statefile);
+  print $fh "$line\n";
+  close $fh;
+}
+
+my $js = JSON->new;
+my $enable = 1;
+$js = $js->latin1([$enable]);
+
+my $lastrow=getState();
+while(1) {
+  my $response=$ua->request( $req );
+  $json = $js->decode($response->content);
+  my $laststate = getState();
+  my $array=$json->{'logSystem'};
+  
+  foreach (reverse(@$array)) {
+    my ($year, $month, $day, $hour, $minute, $second, $logrow, $msg, $color, $level) = @$_;
+    $msg=encode('UTF-8', $msg, Encode::FB_CROAK);
+    if($logrow > $lastrow) {
+      printf "%04d-%02d-%02d %02d:%02d:%02d %d %s\n", $year, $month, $day, $hour, $minute, $second, $logrow, $msg;
+      syslog("info", "%04d-%02d-%02d %02d:%02d:%02d %d %s", $year, $month, $day, $hour, $minute, $second, $logrow, $msg);
+      $lastrow=$logrow;
+    }
+  }
+  setState($lastrow);
+  sleep 10;
+}
