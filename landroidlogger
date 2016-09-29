@@ -60,7 +60,7 @@ while(1) {
   foreach (reverse(@$array)) {
     my ($year, $month, $day, $hour, $minute, $second, $logrow, $msg, $color, $level) = @$_;
     $msg=encode('UTF-8', $msg, Encode::FB_CROAK);
-    if($logrow > $lastrow) {
+    if($logrow > $lastrow || $lastrow == 49152) {
       printf "%04d-%02d-%02d %02d:%02d:%02d %d %s\n", $year, $month, $day, $hour, $minute, $second, $logrow, $msg;
       syslog("info", "%04d-%02d-%02d %02d:%02d:%02d %d %s", $year, $month, $day, $hour, $minute, $second, $logrow, $msg);
       $lastrow=$logrow;
